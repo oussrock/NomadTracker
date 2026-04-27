@@ -2,8 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
-import sqlite3 from 'sqlite3';
-import { open } from 'sqlite';
+import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -20,64 +19,75 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '../client/dist')));
 
 // Initialize Database
-let db;
-(async () => {
-    db = await open({
-        filename: './nomad_tracker.db',
-        driver: sqlite3.Database
-    });
+const db = new Database('./nomad_tracker.db');
 
-    await db.exec(`
-        CREATE TABLE IF NOT EXISTS applications (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            company TEXT NOT NULL,
-            role TEXT NOT NULL,
-            market TEXT,
-            salary_est TEXT,
-            status TEXT DEFAULT 'pending', -- pending, applied, interview, offer, rejected
-            url TEXT,
-            date_applied DATE,
-            notes TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    `);
-    console.log('Database initialized.');
-})();
+db.exec(`
+    CREATE TABLE IF NOT EXISTS applications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        company TEXT NOT NULL,
+        role TEXT NOT NULL,
+        market TEXT,
+        salary_est TEXT,
+        status TEXT DEFAULT 'pending',
+        url TEXT,
+        date_applied DATE,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+`);
+console.log('Database initialized.');
 
 // API: Get all applications
-app.get('/api/applications', async (req, res) => {
-    const apps = await db.all('SELECT * FROM applications ORDER BY created_at DESC');
-    res.json(apps);
+app.get('/api/applications', (req, res) => {
+    try {
+        const apps = db.prepare('SELECT * FROM applications ORDER BY created_at DESC').all();
+        res.json(apps);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // API: Add application
-app.post('/api/applications', async (req, res) => {
-    const { company, role, market, salary_est, status, url, date_applied, notes } = req.body;
-    const result = await db.run(
-        'INSERT INTO applications (company, role, market, salary_est, status, url, date_applied, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [company, role, market, salary_est, status, url, date_applied, notes]
-    );
-    res.json({ id: result.lastID });
+app.post('/api/applications', (req, res) => {
+    try {
+        const { company, role, market, salary_est, status, url, date_applied, notes } = req.body;
+        const stmt = db.prepare(
+            'INSERT INTO applications (company, role, market, salary_est, status, url, date_applied, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        );
+        const result = stmt.run(company, role, market, salary_est, status, url, date_applied, notes);
+        res.json({ id: result.lastInsertRowid });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // API: Update full application
-app.put('/api/applications/:id', async (req, res) => {
+app.put('/api/applications/:id', (req, res) => {
     console.log(`Updating application ${req.params.id}:`, req.body);
     const { company, role, market, salary_est, status, url, date_applied, notes } = req.body;
-    
+
     try {
         if (Object.keys(req.body).length === 1 && req.body.status) {
-            await db.run('UPDATE applications SET status = ? WHERE id = ?', [status, req.params.id]);
+            db.prepare('UPDATE applications SET status = ? WHERE id = ?').run(status, req.params.id);
         } else {
-            await db.run(
-                'UPDATE applications SET company = ?, role = ?, market = ?, salary_est = ?, status = ?, url = ?, date_applied = ?, notes = ? WHERE id = ?',
-                [company, role, market, salary_est, status, url, date_applied, notes, req.params.id]
-            );
+            db.prepare(
+                'UPDATE applications SET company = ?, role = ?, market = ?, salary_est = ?, status = ?, url = ?, date_applied = ?, notes = ? WHERE id = ?'
+            ).run(company, role, market, salary_est, status, url, date_applied, notes, req.params.id);
         }
         console.log('Update successful');
         res.json({ success: true });
     } catch (err) {
         console.error('Update failed:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// API: Delete application
+app.delete('/api/applications/:id', (req, res) => {
+    try {
+        db.prepare('DELETE FROM applications WHERE id = ?').run(req.params.id);
+        res.json({ success: true });
+    } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
@@ -108,14 +118,14 @@ app.post('/api/extract-linkedin', async (req, res) => {
             url: url
         });
     } catch (error) {
-        res.json({ 
+        res.json({
             role: '', company: '', market: 'USA/Canada', url: url,
             warning: 'LinkedIn blocked automated extraction.'
         });
     }
 });
 
-// Catch-all: serve React app
+// Catch-all: serve React app for all non-API routes
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '../client/dist', 'index.html'));
 });

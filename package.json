@@ -10,7 +10,7 @@
     "install:all": "npm install && cd server && npm install && cd ../client && npm install",
     "build:client": "cd client && npm run build",
     "build:server": "cd server && npm install",
-    "build": "npm ci && npm run build:client",
+    "build": "npm run install:all && cd client && npm install && npm run build",
     "start": "node server/index.js",
     "dev": "echo 'Run client and server separately for development' && echo 'npm run dev --prefix client' && echo 'npm run dev --prefix server'"
   },

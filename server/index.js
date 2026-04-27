@@ -126,7 +126,7 @@ app.post('/api/extract-linkedin', async (req, res) => {
 });
 
 // Catch-all: serve React app for all non-API routes
-app.get('*', (req, res) => {
+app.get('/{*splat}', (req, res) => {
     res.sendFile(path.join(__dirname, '../client/dist', 'index.html'));
 });
 

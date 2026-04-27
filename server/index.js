@@ -4,12 +4,20 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
-const port = 3001;
+const port = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
+
+// Serve static files from the React app
+app.use(express.static(path.join(__dirname, '../client/dist')));
 
 // Initialize Database
 let db;
@@ -82,8 +90,6 @@ app.post('/api/extract-linkedin', async (req, res) => {
     }
 
     try {
-        // LinkedIn often blocks axios/cheerio. In a real app, you'd use a proxy or Puppeteer.
-        // For this prototype, we'll try a basic fetch with browser-like headers.
         const response = await axios.get(url, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
@@ -91,8 +97,6 @@ app.post('/api/extract-linkedin', async (req, res) => {
         });
 
         const $ = cheerio.load(response.data);
-        
-        // Extracting common LinkedIn job patterns
         const jobTitle = $('h1').first().text().trim() || $('.top-card-layout__title').text().trim();
         const companyName = $('.topcard__flavor--bullet').first().prev().text().trim() || $('.top-card-layout__subtitle-subject').text().trim();
         const location = $('.topcard__flavor--bullet').first().text().trim() || $('.top-card-layout__first-subline').text().trim();
@@ -104,18 +108,13 @@ app.post('/api/extract-linkedin', async (req, res) => {
             url: url
         });
     } catch (error) {
-        console.error('LinkedIn extraction failed:', error.message);
-        // Fallback: Just return the URL so the user can fill the rest if blocked
         res.json({ 
-            role: '', 
-            company: '', 
-            market: 'USA/Canada', 
-            url: url,
-            warning: 'LinkedIn blocked automated extraction. Please fill details manually.'
+            role: '', company: '', market: 'USA/Canada', url: url,
+            warning: 'LinkedIn blocked automated extraction.'
         });
     }
 });
 
-app.listen(port, () => {
+});
     console.log(`Server running at http://localhost:${port}`);
 });

@@ -28,11 +28,13 @@ const StarField = () => {
   );
 };
 
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
 export default function App() {
   const [apps, setApps] = useState<any[]>([]);
 
   useEffect(() => {
-    axios.get('http://localhost:3001/api/applications').then(res => setApps(res.data));
+    axios.get(`${API_BASE}/api/applications`).then(res => setApps(res.data));
   }, []);
 
   const stats = {
